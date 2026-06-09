@@ -1,0 +1,29 @@
+# deps
+node_modules/
+
+# build
+dist/
+*.tgz
+
+# env
+.env
+.env.local
+
+# data
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# editor
+.vscode/
+.idea/
+.DS_Store
+
+# logs
+*.log
+npm-debug.log*
+
+# test artifacts
+coverage/
+.nyc_output/
