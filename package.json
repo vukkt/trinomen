@@ -12,7 +12,7 @@
   },
   "type": "module",
   "bin": {
-    "trinomen": "./bin/cli.js"
+    "trinomen": "bin/cli.js"
   },
   "main": "./src/index.js",
   "exports": {
