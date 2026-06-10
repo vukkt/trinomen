@@ -1,6 +1,6 @@
 {
   "name": "trinomen",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Three-agent LLM pipeline in your terminal: a router classifies the prompt, a worker generates, a reviewer audits — all on free Groq + Gemini tiers with local budget tracking",
   "repository": {
     "type": "git",
