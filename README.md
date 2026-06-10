@@ -135,7 +135,7 @@ npm run test:unit # offline tests only (what CI runs)
 node bin/cli.js "hello"
 ```
 
-Stack: Node ≥ 18, ESM, [Vercel AI SDK](https://ai-sdk.dev) v6 with zod-validated structured outputs, `better-sqlite3` for budget persistence, `commander` + `ora` + `chalk` for the CLI.
+Stack: Node ≥ 20, ESM, [Vercel AI SDK](https://ai-sdk.dev) v6 with zod-validated structured outputs, `better-sqlite3` for budget persistence, `commander` + `ora` + `chalk` for the CLI.
 
 ## License
 
