@@ -83,7 +83,7 @@ function buildRefinementPrompt(originalPrompt, lastCode, history) {
   return sections.join('\n\n');
 }
 
-function extractCode(text) {
+export function extractCode(text) {
   const match = text.match(/```(?:tsx|typescript|ts|jsx|javascript|js)?\n([\s\S]+?)```/);
   return match ? match[1].trim() : text.trim();
 }

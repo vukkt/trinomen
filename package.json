@@ -30,7 +30,9 @@
   "scripts": {
     "start": "node bin/cli.js",
     "dev": "node --watch bin/cli.js",
-    "test": "node test/eval.js",
+    "test": "npm run test:unit && npm run test:eval",
+    "test:unit": "node --test test/unit.test.js",
+    "test:eval": "node test/eval.js",
     "prepublishOnly": "npm test"
   },
   "keywords": [

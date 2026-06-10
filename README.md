@@ -1,6 +1,12 @@
 # trinomen
 
+[![CI](https://github.com/vukkt/trinomen/actions/workflows/ci.yml/badge.svg)](https://github.com/vukkt/trinomen/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/trinomen)](https://www.npmjs.com/package/trinomen)
+[![license](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+
 > Three agents, zero dollars. A multi-agent LLM pipeline in your terminal — router → worker → reviewer — running entirely on free Groq and Gemini tiers.
+
+![trinomen demo: routing, generating and reviewing a useDebounce hook](https://raw.githubusercontent.com/vukkt/trinomen/main/assets/demo.gif)
 
 Ask a question, get an answer. Ask for code, get code that has been **classified, generated, reviewed, and (optionally) typechecked in a loop until it passes** — each stage handled by a different model picked for that job.
 
@@ -124,7 +130,8 @@ const { review: verdict } = await review('write a binary search in TS', text);
 ```bash
 git clone https://github.com/vukkt/trinomen.git
 cd trinomen && npm install
-npm test          # live router eval (skips cleanly if no keys configured)
+npm test          # offline unit tests + live router eval (eval skips without keys)
+npm run test:unit # offline tests only (what CI runs)
 node bin/cli.js "hello"
 ```
 
