@@ -96,23 +96,41 @@ The loop exits when the code typechecks **and** the reviewer says `ship`, or aft
 
 Every call records its token usage to `~/.trinomen/budget.db` (SQLite). Before each call, the rolling 24-hour spend is checked against conservative per-model caps; models over budget are skipped in favor of their fallback. `trinomen status` shows the current spend, `trinomen reset` clears it.
 
-## Does the pipeline actually help?
+## Is the pipeline actually worth it?
 
-`test/benchmark.js` compares the full refinement pipeline against a **one-shot call through the same worker chain** — same system prompt, same token budget; the only difference is the typecheck gate and reviewer feedback. Scoring is objective: does the generated TypeScript pass `tsc --strict`?
+Compiling is a weak success metric — code can typecheck and still be wrong. So `test/benchmark.js` scores **functional correctness**: each task pins an exact API, and the compiled output must pass a hidden test suite no model ever sees. Three arms, same worker model, same prompt, same budget:
 
-Results from a real run (2026-06-10, live free tiers):
+- **One-shot** — single generation, no feedback
+- **tsc-retry** — typecheck errors fed back, regenerate (no reviewer; the ablation)
+- **Full pipeline** — typecheck gate + LLM reviewer (`--loop`)
 
-| Task | One-shot tsc | Pipeline tsc | Verdict | Iterations | One-shot cost | Pipeline cost |
-| --- | --- | --- | --- | --- | --- | --- |
-| useDebounce hook | ❌ (10 errors) | ✅ | ship | 2 | 1.1k tok / 1s | 8.3k tok / 6s |
-| type-safe TypedEventEmitter | ❌ (1 error) | ✅ | ship | 2 | 1.3k tok / 1s | 10.4k tok / 45s |
-| usePagination hook (clamped) | ✅ | ✅ | ship | 2 | 1.2k tok / 1s | 9.8k tok / 43s |
+Round 1 (2026-06-10, live free tiers):
 
-**One-shot: 1/3 typecheck. Pipeline: 3/3 typecheck — every output also carries an explicit reviewer verdict.** Across all runs that day the aggregate was one-shot 2/5 vs pipeline 4/5.
+| Task | One-shot | tsc-retry (no reviewer) | Full pipeline |
+| --- | --- | --- | --- |
+| debounce | ❌ tests | ✅ | ✅ |
+| TypedEventEmitter | ✅ | ✅ | ❌ compile |
+| paginate | ✅ | ✅ | ✅ |
+| deepEqual | ❌ compile | ✅ | ⊘ quota |
+| LRUCache | ✅ | ✅ | ✅ |
+| **total** | **3/5 · 6.0k tok** | **5/5 · 8.0k tok** | **3/4 · 41.9k tok** |
 
-The honest trade-off: the pipeline costs roughly **8× the tokens** and seconds-to-minutes instead of ~1s. That's the product: it converts "usually compiles" into "compiles, strict-mode clean, and reviewed" — still at a cost of zero dollars.
+The ablation was damning and drove two changes shipped in this repo:
 
-Caveats worth knowing: the sample is small, free-tier model quality varies minute to minute, and per-minute quotas can stall back-to-back benchmark runs (interactive use doesn't hit this — and when it happens, trinomen's budget tracker now skips saturated models before burning the request). Reproduce with `node test/benchmark.js`.
+1. **Compiler feedback is most of the value.** tsc-retry fixed every one-shot failure for ~30% more tokens. The reviewer-everywhere pipeline cost 5× more and did *worse* — so the loop is now **gate-first**: the reviewer only runs once code compiles, spending its tokens on what tsc can't check instead of arguing with the compiler.
+2. The pipeline's compile failure was a **gate bug the benchmark exposed**: pure TS was parsed as `.tsx`, where generics are ambiguous with JSX. Fixed.
+
+Round 2, after both fixes (partial — free-tier daily quotas ran out mid-run):
+
+| Task | One-shot | tsc-retry (no reviewer) | Full pipeline |
+| --- | --- | --- | --- |
+| debounce | ✅ | ❌ tests | ✅ |
+| TypedEventEmitter | ❌ compile | ✅ | ✅ |
+| **total** | **1/2 · 2.5k tok** | **1/2 · 2.4k tok** | **2/2 · 14.4k tok** |
+
+The debounce row is the reviewer earning its seat: the worker emitted a React hook that **compiles cleanly but crashes at runtime** ("Invalid hook call"). tsc-retry shipped it; the reviewer caught it and forced a regeneration that passed. Gate-first also cut that pipeline run from 8.8k to 4.1k tokens.
+
+**Honest verdict:** compiler feedback alone gets you cheap mechanical correctness; the reviewer is a semantic safety net for defects that typecheck — at a real token premium, now paid only on compiling code. Sample sizes are small and free-tier model quality varies run to run; reproduce with `node test/benchmark.js` and read the tables skeptically.
 
 ## Commands & flags
 

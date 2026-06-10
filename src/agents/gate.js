@@ -3,9 +3,9 @@ import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 import os from 'node:os';
 
-const SANDBOX_DIR = join(os.homedir(), '.trinomen', 'sandbox');
+export const SANDBOX_DIR = join(os.homedir(), '.trinomen', 'sandbox');
 
-function ensureSandbox() {
+export function ensureSandbox() {
   if (existsSync(join(SANDBOX_DIR, 'node_modules', 'typescript'))) return;
   mkdirSync(SANDBOX_DIR, { recursive: true });
   writeFileSync(
@@ -50,8 +50,13 @@ function ensureSandbox() {
 
 export async function runGate(code) {
   ensureSandbox();
-  const codePath = join(SANDBOX_DIR, 'generated.tsx');
-  writeFileSync(codePath, code);
+  // Pure TS must not go through the .tsx parser: generics like <T>(x: T)
+  // are ambiguous with JSX there and produce false typecheck errors.
+  const isJsx = /<\/|\/>/.test(code);
+  const filename = isJsx ? 'generated.tsx' : 'generated.ts';
+  const stale = isJsx ? 'generated.ts' : 'generated.tsx';
+  rmSync(join(SANDBOX_DIR, stale), { force: true });
+  writeFileSync(join(SANDBOX_DIR, filename), code);
 
   let typecheckOk = true;
   let typecheckErrors = [];

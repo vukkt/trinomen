@@ -32,12 +32,18 @@ export async function refinementLoop(prompt, opts = {}) {
       console.log(chalk.dim(`  typecheck: ${gateResult.typecheck.ok ? '✓' : '✗ ' + gateResult.typecheck.errors.length + ' errors'}`));
     }
 
-    const reviewResult = await review(prompt, currentCode);
-    const verdict = reviewResult.review.verdict;
-    if (verbose) console.log(chalk.dim(`  review:    ${verdict} (${reviewResult.review.issues.length} issues)`));
+    // Gate first: reviewing code that doesn't compile wastes the most
+    // expensive call on problems the compiler already found.
+    let reviewResult = null;
+    if (gateResult.typecheck.ok) {
+      reviewResult = await review(prompt, currentCode);
+      if (verbose) console.log(chalk.dim(`  review:    ${reviewResult.review.verdict} (${reviewResult.review.issues.length} issues)`));
+    } else if (verbose) {
+      console.log(chalk.dim('  review:    skipped (typecheck failed)'));
+    }
+    const verdict = reviewResult?.review.verdict ?? 'fix';
 
-    const allClean = gateResult.typecheck.ok && verdict === 'ship';
-    if (allClean) {
+    if (gateResult.typecheck.ok && verdict === 'ship') {
       return { code: currentCode, iterations: iteration, finalVerdict: 'ship', history, hitMax: false };
     }
 
@@ -45,7 +51,7 @@ export async function refinementLoop(prompt, opts = {}) {
       iteration,
       code: currentCode,
       typecheckErrors: gateResult.typecheck.errors,
-      reviewIssues: reviewResult.review.issues,
+      reviewIssues: reviewResult?.review.issues ?? [],
     });
 
     if (iteration === max) {
@@ -54,7 +60,7 @@ export async function refinementLoop(prompt, opts = {}) {
         iterations: iteration,
         finalVerdict: verdict,
         gateResult,
-        reviewResult: reviewResult.review,
+        reviewResult: reviewResult?.review ?? null,
         history,
         hitMax: true,
       };
