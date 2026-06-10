@@ -24,16 +24,19 @@ function getDb() {
   return db;
 }
 
-// Conservative caps (~95% of free tier limits)
+// Conservative caps (~95% of free tier limits). rpm matters in practice:
+// Gemini's free tier enforces per-minute quotas that 429 well before the
+// daily ones, so skipping ahead to a fallback beats burning the request.
 const CAPS = {
-  'groq:openai/gpt-oss-20b': { rpd: 950, tpd: 190_000 },
-  'groq:openai/gpt-oss-120b': { rpd: 950, tpd: 190_000 },
-  'groq:llama-3.3-70b-versatile': { rpd: 950, tpd: 95_000 },
-  'google:gemini-2.5-flash': { rpd: 240, tpd: 900_000 },
-  'google:gemini-2.5-flash-lite': { rpd: 950, tpd: 900_000 },
+  'groq:openai/gpt-oss-20b': { rpm: 28, rpd: 950, tpd: 190_000 },
+  'groq:openai/gpt-oss-120b': { rpm: 28, rpd: 950, tpd: 190_000 },
+  'groq:llama-3.3-70b-versatile': { rpm: 28, rpd: 950, tpd: 95_000 },
+  'google:gemini-2.5-flash': { rpm: 9, rpd: 240, tpd: 900_000 },
+  'google:gemini-2.5-flash-lite': { rpm: 14, rpd: 950, tpd: 900_000 },
 };
 
 const DAY_MS = 86_400_000;
+const MINUTE_MS = 60_000;
 
 function key(provider, model) {
   return `${provider}:${model}`;
@@ -55,7 +58,17 @@ export function canCall(provider, model, estimatedTokens = 1000) {
     )
     .get(provider, model, since);
 
-  return stats.requests < cap.rpd && stats.tokens + estimatedTokens < cap.tpd;
+  if (stats.requests >= cap.rpd || stats.tokens + estimatedTokens >= cap.tpd) {
+    return false;
+  }
+
+  const lastMinute = getDb()
+    .prepare(
+      'SELECT COALESCE(SUM(requests), 0) AS requests FROM usage WHERE provider = ? AND model = ? AND ts > ?',
+    )
+    .get(provider, model, Date.now() - MINUTE_MS);
+
+  return lastMinute.requests < cap.rpm;
 }
 
 export function record(provider, model, tokens) {

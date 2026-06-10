@@ -96,6 +96,13 @@ describe('budget', () => {
     assert.equal(canCall('google', 'gemini-2.5-flash', 1000), false);
   });
 
+  test('canCall blocks when the per-minute cap is reached', () => {
+    resetUsage();
+    // gemini-2.5-flash rpm cap is 9, far below its daily cap of 240
+    for (let i = 0; i < 9; i++) record('google', 'gemini-2.5-flash', 1);
+    assert.equal(canCall('google', 'gemini-2.5-flash'), false);
+  });
+
   test('resetUsage clears everything', () => {
     resetUsage();
     assert.equal(getUsage().length, 0);

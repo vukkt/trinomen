@@ -57,36 +57,45 @@ function isRetryable(err) {
   );
 }
 
-export async function callWithFallback(role, opts) {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export async function callWithFallback(role, opts, { passes = 3 } = {}) {
   const sdks = getClients();
   let lastError;
 
-  for (const entry of MODELS[role]) {
-    // ~4 chars per token for the input, plus the output budget
-    const estimatedTokens =
-      Math.ceil((opts.prompt?.length ?? 0) / 4) + (opts.maxOutputTokens ?? 1000);
-    if (!canCall(entry.provider, entry.model, estimatedTokens)) continue;
+  // Walk the fallback chain; if every provider fails transiently
+  // (demand spikes, rate limits), back off and sweep the chain again.
+  for (let pass = 0; pass < passes; pass++) {
+    // second sweep waits long enough to clear per-minute quota windows
+    if (pass > 0) await sleep(pass === 1 ? 5_000 : 30_000);
 
-    try {
-      const model = sdks[entry.provider](entry.model);
-      const result = opts.schema
-        ? await generateObject({ model, maxRetries: 0, ...opts })
-        : await generateText({ model, maxRetries: 0, ...opts });
+    for (const entry of MODELS[role]) {
+      // ~4 chars per token for the input, plus the output budget
+      const estimatedTokens =
+        Math.ceil((opts.prompt?.length ?? 0) / 4) + (opts.maxOutputTokens ?? 1000);
+      if (!canCall(entry.provider, entry.model, estimatedTokens)) continue;
 
-      record(entry.provider, entry.model, result.usage?.totalTokens ?? 0);
+      try {
+        const model = sdks[entry.provider](entry.model);
+        const result = opts.schema
+          ? await generateObject({ model, maxRetries: 0, ...opts })
+          : await generateText({ model, maxRetries: 0, ...opts });
 
-      // pick fields explicitly: the SDK result exposes text/object via
-      // prototype getters, which a spread would silently drop
-      return {
-        text: result.text,
-        object: result.object,
-        usage: result.usage,
-        _meta: { provider: entry.provider, model: entry.model },
-      };
-    } catch (err) {
-      lastError = err;
-      if (isRetryable(err)) continue;
-      throw err;
+        record(entry.provider, entry.model, result.usage?.totalTokens ?? 0);
+
+        // pick fields explicitly: the SDK result exposes text/object via
+        // prototype getters, which a spread would silently drop
+        return {
+          text: result.text,
+          object: result.object,
+          usage: result.usage,
+          _meta: { provider: entry.provider, model: entry.model },
+        };
+      } catch (err) {
+        lastError = err;
+        if (isRetryable(err)) continue;
+        throw err;
+      }
     }
   }
 
